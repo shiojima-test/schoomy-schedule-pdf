@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+test.pdf
+schedule.pdf
+*.log
+.DS_Store
+.env
+service-account-key.json
