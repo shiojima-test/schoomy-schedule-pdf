@@ -18,11 +18,30 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
 
-CSV_URL = (
+SHEET_BASE = (
     'https://docs.google.com/spreadsheets/d/e/'
-    '2PACX-1vRooWpJWGHr60e039XzbxEbeZ7p6zEL-wuP-xrq4jv1TnZXHSOWjtT8FvScuKsQn05aZx8PfIW14d83'
-    '/pub?output=csv'
+    '2PACX-1vRooWpJWGHr60e039XzbxEbeZ7p6zEL-wuP-xrq4jv1TnZXHSOWjtT8FvScuKsQn05aZx8PfIW14d83/pub'
 )
+CSV_URL = f'{SHEET_BASE}?output=csv'
+CONFIG_CSV_URL = f'{SHEET_BASE}?gid=918840879&single=true&output=csv'
+
+
+def fetch_config():
+    """configシートから version と lastUpdate を読む。
+    キャッシュ回避のため URL にタイムスタンプを付与する。"""
+    import time
+    url = f'{CONFIG_CSV_URL}&_ts={int(time.time())}'
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    text = resp.content.decode('utf-8-sig')
+    reader = csv.DictReader(io.StringIO(text))
+    kv = {row['key'].strip(): row['value'].strip() for row in reader if row.get('key')}
+    if 'version' not in kv or 'lastUpdate' not in kv:
+        raise RuntimeError(f'config sheet missing required keys; got {list(kv)}')
+    return {
+        'version': int(kv['version']),
+        'last_update': kv['lastUpdate'],
+    }
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 FONT_REGULAR = 'JP'
 FONT_BOLD = 'JP-Bold'
@@ -96,7 +115,7 @@ def fmt_entry_result(row):
     return '\n'.join(lines)
 
 
-def build_document(args, rows):
+def build_document(args, rows, version, last_update):
     pdfmetrics.registerFont(TTFont(FONT_REGULAR, os.path.join(FONT_DIR, 'NotoSansJP-Regular.ttf')))
     pdfmetrics.registerFont(TTFont(FONT_BOLD, os.path.join(FONT_DIR, 'NotoSansJP-Bold.ttf')))
     pdfmetrics.registerFontFamily(FONT_REGULAR, normal=FONT_REGULAR, bold=FONT_BOLD,
@@ -128,9 +147,8 @@ def build_document(args, rows):
     story = []
     story.append(Paragraph('スクーミーフェスタ年間スケジュール 2026年度', st_title))
     story.append(Spacer(1, 1*mm))
-    y, m, d = args.update_date.split('-')
     story.append(Paragraph(
-        f'v{args.version} / {y}年{int(m)}月{int(d)}日 更新 / 株式会社スクーミー',
+        f'v{version} / {last_update} 更新 / 株式会社スクーミー',
         st_subtitle
     ))
     story.append(Spacer(1, 3*mm))
@@ -249,10 +267,11 @@ def build_document(args, rows):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--version', type=int, required=True)
-    p.add_argument('--update-date', required=True, help='YYYY-MM-DD')
     p.add_argument('--output', required=True)
     args = p.parse_args()
+
+    config = fetch_config()
+    print(f"config: version={config['version']} lastUpdate={config['last_update']}")
 
     r = requests.get(CSV_URL, timeout=30)
     r.raise_for_status()
@@ -271,7 +290,7 @@ def main():
         print('ERROR: no rows to render', file=sys.stderr)
         sys.exit(1)
 
-    build_document(args, rows)
+    build_document(args, rows, config['version'], config['last_update'])
     print(f'Generated: {args.output} ({len(rows)} rows)')
 
 

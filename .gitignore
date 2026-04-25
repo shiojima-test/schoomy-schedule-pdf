@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 test.pdf
+test_preview*.png
 schedule.pdf
 *.log
 .DS_Store
