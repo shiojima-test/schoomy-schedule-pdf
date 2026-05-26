@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """Generate SchooMy Festa annual schedule PDF (A4 landscape)."""
+# v1: is_published == 'TRUE' で PDF 掲載判定 (HP と同じフラグを兼用)
+# v2: 新列 show_in_pdf で PDF 掲載判定。is_published による PDF 除外は廃止
+#     (HP 側ロジックは無変更)。show_in_pdf が FALSE/0/NO のときだけ非掲載、
+#     空欄・TRUE・列なしは掲載 (後方互換)。
+__version__ = '2'
+
 import argparse
 import csv
 import io
@@ -42,6 +48,15 @@ def fetch_config():
         'version': int(kv['version']),
         'last_update': kv['lastUpdate'],
     }
+def _is_pdf_visible(row):
+    """PDF 掲載可否を判定する (v2)。
+    show_in_pdf が FALSE/0/NO (大文字小文字問わず) のときだけ非掲載。
+    空欄・TRUE・列が存在しない場合は掲載 (後方互換)。
+    is_published は参照しない。"""
+    v = (row.get('show_in_pdf') or '').strip().upper()
+    return v not in ('FALSE', '0', 'NO')
+
+
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 FONT_REGULAR = 'JP'
 FONT_BOLD = 'JP-Bold'
@@ -278,13 +293,15 @@ def main():
     text = r.content.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(text))
     rows = [row for row in reader]
+    total = len(rows)
 
     rows = [
         row for row in rows
-        if (row.get('is_published') or '').strip().upper() == 'TRUE'
+        if _is_pdf_visible(row)
         and (row.get('type') or '').strip() in ('festa', 'session')
     ]
     rows.sort(key=sort_key)
+    print(f'rows: {total} in CSV -> {len(rows)} visible in PDF (script v{__version__})')
 
     if not rows:
         print('ERROR: no rows to render', file=sys.stderr)
