@@ -4,7 +4,7 @@
 # v2: 新列 show_in_pdf で PDF 掲載判定。is_published による PDF 除外は廃止
 #     (HP 側ロジックは無変更)。show_in_pdf が FALSE/0/NO のときだけ非掲載、
 #     空欄・TRUE・列なしは掲載 (後方互換)。
-__version__ = '2'
+__version__ = '3'
 
 import argparse
 import csv
@@ -12,7 +12,7 @@ import io
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from html import escape as h_escape
 
 import requests
@@ -170,7 +170,7 @@ def build_document(args, rows, version, last_update):
 
     legend_data = [[
         Paragraph('フェスタ', st_legend_badge),
-        Paragraph('全国大会・競技大会', st_legend),
+        Paragraph('一般開放をして発表やワークショップが楽しめるイベント', st_legend),
         Paragraph('説明会', st_legend_badge),
         Paragraph('大会に向けた説明会・交流会', st_legend),
     ]]
@@ -300,6 +300,13 @@ def main():
         if _is_pdf_visible(row)
         and (row.get('type') or '').strip() in ('festa', 'session')
     ]
+    # v3: 終わったイベントは載せない（日付のない「◯月中予定」は残す）
+    today = datetime.now(timezone(timedelta(hours=9))).replace(tzinfo=None).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    def _ended(row):
+        end = parse_date(row.get('date_end')) or parse_date(row.get('date_start'))
+        return end is not None and end < today
+    rows = [row for row in rows if not _ended(row)]
     rows.sort(key=sort_key)
     print(f'rows: {total} in CSV -> {len(rows)} visible in PDF (script v{__version__})')
 
